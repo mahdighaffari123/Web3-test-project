@@ -6,7 +6,7 @@ export const ChainId = {
   BSC_TESTNET: 97,
 };
 
-const supportedChainIds = Object.values(ChainId);
+export const supportedChainIds = Object.values(ChainId);
 
 export const injected = new InjectedConnector({
   supportedChainIds,

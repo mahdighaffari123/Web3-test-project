@@ -16,7 +16,7 @@ import {
   ModalCloseButton,
 } from "@chakra-ui/react";
 import { useDisclosure, useToast } from "@chakra-ui/react";
-import { injected } from "../config/wallets";
+import { injected, supportedChainIds } from "../config/wallets";
 import abi from "./abi.json";
 import { AbiItem } from "web3-utils";
 
@@ -27,22 +27,70 @@ declare global {
 }
 
 export default function ConnectButton() {
-  const { account, active, activate, library, deactivate } = useWeb3React();
+  const { account, active, activate, library, deactivate, error, chainId } =
+    useWeb3React();
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const [connected, setConnected] = useState<boolean>(false);
+  const [walletChainId, setWalletChainId] = useState<number>(0);
   const [balance, setBalance] = useState<string>("0");
   const [babyBalance, setBabyBalance] = useState<string>("0");
   const [mode, setMode] = useState<string>("BNB");
   const [recieverAdd, setRecieverAdd] = useState<string>("");
   const [sendAmount, setSendAmount] = useState<number>(0);
-  const [gasFee, setGasFee] = useState<string>('');
+  const [gasFee, setGasFee] = useState<string>("");
   const [gasLimit, setGasLimit] = useState<number>(0);
   const toast = useToast();
+  const supportedChainId = supportedChainIds.includes(walletChainId);
 
-  function handleConnectWallet() {
-    connected ? deactivate() : activate(injected);
-    setConnected(!connected);
-  }
+  const handleNetworkSwitch = async () => {
+    try {
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: "0x1",
+            chainName: "Ethereum Mainnet",
+            nativeCurrency: {
+              name: "ETH",
+              symbol: "ETH",
+              decimals: 18,
+            },
+            rpcUrls: ["https://eth.llamarpc.com"],
+            blockExplorerUrls: ["https://etherscan.io"],
+          },
+        ],
+      });
+      activate(injected);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const getChainId: any = async () => {
+    if (window.ethereum) {
+      const chainIdHex = await window.ethereum.request({
+        method: "eth_chainId",
+      });
+      const chainId = parseInt(chainIdHex, 16);
+      setWalletChainId(chainId);
+    }
+  };
+  console.log(account);
+  useEffect(() => {
+    getChainId();
+  }, [chainId]);
+
+  console.log(account);
+  const handleConnectWallet = () => {
+    try {
+      if (supportedChainId) {
+        activate(injected);
+      } else {
+        handleNetworkSwitch();
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
 
   function handleMode() {
     setMode(mode === "BNB" ? "BabyDoge" : "BNB");
@@ -69,11 +117,11 @@ export default function ConnectButton() {
         status: "error",
       });
     }
-    
+
     const web3 = new Web3(library.provider);
     var block = await web3.eth.getBlock("latest");
     setGasLimit(block.gasLimit);
-    
+
     const gasPrice = await web3.eth.getGasPrice();
     setGasFee(toGWei(web3, gasPrice.toString()));
 
@@ -94,14 +142,14 @@ export default function ConnectButton() {
   const sendAction = useCallback(async () => {
     const web3 = new Web3(library.provider);
 
-    const txParams : any = {
+    const txParams: any = {
       from: account,
       to: recieverAdd,
 
       value: Web3.utils.toWei(sendAmount.toString(), "ether"),
     };
-    console.log(txParams); 
-    await web3.eth.sendTransaction(txParams, (error : any, hash : any) => {
+    console.log(txParams);
+    await web3.eth.sendTransaction(txParams, (error: any, hash: any) => {
       if (error) {
         console.error(error);
       } else {
@@ -114,7 +162,7 @@ export default function ConnectButton() {
           console.log(`Transaction data: ${transaction?.input}`);
         });
       }
-    })
+    });
     onClose();
     valueload();
   }, [account, library, recieverAdd, sendAmount]);
@@ -131,12 +179,9 @@ export default function ConnectButton() {
     }
   }
 
-  function toGWei(
-    web3: any,
-    val: string
-  ) {
+  function toGWei(web3: any, val: string) {
     if (val) {
-      return web3.utils.fromWei(val, 'gwei');
+      return web3.utils.fromWei(val, "gwei");
     } else {
       return "0";
     }
@@ -155,7 +200,6 @@ export default function ConnectButton() {
 
       const gasPrice = await web3.eth.getGasPrice();
       setGasFee(gasPrice);
-
 
       // const value1 = await ctx.methods.balanceOf(account).call({gasPrice: Number(gasPrice) * 100});
       // console.log('[baby amount]', value1)
@@ -274,7 +318,7 @@ export default function ConnectButton() {
       </Box>
       <Box display="flex" justifyContent="center" alignItems="center">
         <Button
-          onClick={handleConnectWallet}
+          onClick={deactivate}
           bg="#158DE8"
           color="white"
           fontWeight="medium"
@@ -299,7 +343,9 @@ export default function ConnectButton() {
           <ModalHeader>Are you Sure?</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <div>Are you sure {sendAmount} {mode} to {recieverAdd} user?</div>
+            <div>
+              Are you sure {sendAmount} {mode} to {recieverAdd} user?
+            </div>
             <div>Gas Limit: {gasLimit}</div>
             <div>Gas Price: {gasFee}</div>
           </ModalBody>
@@ -314,7 +360,7 @@ export default function ConnectButton() {
         </ModalContent>
       </Modal>
     </Box>
-  ) : (
+  ) : supportedChainId ? (
     <Box bg="white" p="4" borderRadius="xl">
       <Button
         onClick={handleConnectWallet}
@@ -334,6 +380,28 @@ export default function ConnectButton() {
         }}
       >
         Connect Wallet
+      </Button>
+    </Box>
+  ) : (
+    <Box bg="white" p="4" borderRadius="xl">
+      <Button
+        onClick={handleNetworkSwitch}
+        bg="#158DE8"
+        color="white"
+        fontWeight="medium"
+        borderRadius="xl"
+        border="1px solid transparent"
+        width="300px"
+        _hover={{
+          borderColor: "blue.700",
+          color: "gray.800",
+        }}
+        _active={{
+          backgroundColor: "blue.800",
+          borderColor: "blue.700",
+        }}
+      >
+        Change Network
       </Button>
     </Box>
   );
